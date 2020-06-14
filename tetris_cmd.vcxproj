@@ -158,6 +158,7 @@
     <ClInclude Include="src\block\Block.h" />
     <ClInclude Include="src\shapes.h" />
     <ClInclude Include="src\shape\Shape.h" />
+    <ClInclude Include="src\tetris_cmd.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

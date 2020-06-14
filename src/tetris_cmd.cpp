@@ -15,18 +15,22 @@
 #include "block/Block.h"
 #include "shape/Shape.h"
 #include "shapes.h"
+#include "tetris_cmd.h"
+
+#define CAST(x, type)	((type)(x))
+
 
 #define GAME_FPS				60
-#define WINDOW_REFRESH			1.0f / GAME_FPS
+#define WINDOW_REFRESH			(1.0f / GAME_FPS)
 
 #define WINDOW_W				20
 #define WINDOW_H				20
 #define FRAME_THICKNESS			1
 
-#define GAME_WINDOW_W	(WINDOW_W) - (2 *(FRAME_THICKNESS))
-#define GAME_WINDOW_H	(WINDOW_H) - (2 *(FRAME_THICKNESS))
+#define GAME_WINDOW_W	((WINDOW_W) - (2 *(FRAME_THICKNESS)))
+#define GAME_WINDOW_H	((WINDOW_H) - (2 *(FRAME_THICKNESS)))
 
-#define WINDOW_DIM   WINDOW_W * WINDOW_H
+#define WINDOW_DIM   (WINDOW_W * WINDOW_H)
 
 #define BLOCK_RENDERED		'#'
 #define FRAME_RENDERER		0xDB    // █
@@ -35,13 +39,24 @@
 
 typedef uint8_t Window_t;
 
+class Game_Handler
+{
+public:
+	Block* curr_block;
+};
+Game_Handler g_game_handler;
 
-#define CAST(x, type)	((type)(x))
 
-Window_t g_window[WINDOW_DIM] = { " " };
+const int8_t rot_matrises[3][4] =
+{
+	{0, -1, 1, 0 },
+	{-1, 0, 0, -1},
+	{0, 1, -1, 0 }
+};
+
+Window_t g_window[WINDOW_DIM];
 
 Shape_t * g_curr_shape;
-std::vector<Block *>g_blocks_all;
 
 template<typename F=Window_t, typename T=uint8_t, typename K=uint8_t>
 void Draw_Frame(F * p_window, T window_w, T window_h, T frame_thickness, K frame_render)
@@ -88,20 +103,57 @@ void ShowConsoleCursor(bool showFlag)
 	SetConsoleCursorInfo(out, &cursorInfo);
 }
 
-void Render_Shape(Window_t * p_window, Shape_t * p_shape)
+void Render_Block(Window_t * p_window, Block * p_block)
 {
-	uint16_t shape_offset = (WINDOW_W * (p_shape->pos[1] + FRAME_THICKNESS)) +
-		(p_shape->pos[0] + FRAME_THICKNESS);
-	std::vector<uint8_t> shape_size = p_shape->get_size();
+	uint16_t shape_offset = (WINDOW_W * (p_block->pos[1] + FRAME_THICKNESS)) +
+		(p_block->pos[0] + FRAME_THICKNESS);
+	std::vector<uint8_t> shape_size = p_block->shape->get_size();
 
 	uint16_t frame_point;
-	for (int i = 0; i < SHAPE_GRID_H; i++)
+	if (p_block->rotation == 0 || p_block->shape->is_full_symmetric)
 	{
-		for (int j = 0; j < SHAPE_GRID_W; j++)
+		for (int i = 0; i < SHAPE_GRID_H; i++)
 		{
-			frame_point = shape_offset + ((i * WINDOW_W) + j);
-			if (p_shape->mask[(i * SHAPE_GRID_W) + j])
-				p_window[frame_point] = BLOCK_RENDERED;
+			for (int j = 0; j < SHAPE_GRID_W; j++)
+			{
+				frame_point = shape_offset + ((i * WINDOW_W) + j);
+				if (p_block->shape->mask[(i * SHAPE_GRID_W) + j])
+					p_window[frame_point] = BLOCK_RENDERED;
+			}
+		}
+	}
+	else if (!p_block->shape->is_full_symmetric)
+	{	// Rotate the shape and render
+		uint8_t* shape_rotated = (uint8_t *)calloc(SHAPE_DIM, sizeof(uint8_t));
+
+		int8_t rot_matrix[4];
+
+		memcpy(rot_matrix, &(rot_matrises[p_block->rotation - 1][0]), 4);
+
+		for (int i = 0; i < SHAPE_GRID_H; i++)
+		{
+			for (int j = 0; j < SHAPE_GRID_W; j++)
+			{
+				if (p_block->shape->mask[(i * SHAPE_GRID_W) + j])
+				{
+					int8_t curr_x = j - p_block->shape->center[0];
+					int8_t curr_y = i - p_block->shape->center[1];
+
+					int8_t roted_x = 0;
+					int8_t roted_y = 0;
+					for (int k = 0; k < 2; k++)
+					{
+						roted_x += (rot_matrix[k] * curr_x);
+						roted_y += (rot_matrix[k + 2] * curr_y);
+					}
+					uint8_t roted_diff_x = roted_x + p_block->shape->center[0];
+					uint8_t roted_diff_y = roted_y + p_block->shape->center[1];
+
+					frame_point = shape_offset + ((roted_diff_x * WINDOW_W) + roted_diff_y);
+					p_window[frame_point] = BLOCK_RENDERED;
+
+				}
+			}
 		}
 	}
 }
@@ -123,23 +175,28 @@ void Detect_Key()
 	while (1)
 	{
 		int a = _getch();
-		if (!g_curr_shape->locked)
-		switch (a)
+		if (!g_game_handler.curr_block->locked)
 		{
-		case 'a':
-			if (g_curr_shape->pos[0] > FRAME_THICKNESS - 1)
-				g_curr_shape->pos[0]--;
-			break;
-		case 'd':
-			if (g_curr_shape->pos[0] + g_curr_shape->get_size()[0] < (WINDOW_W - 1) - FRAME_THICKNESS)
-				g_curr_shape->pos[0]++;
-			break;
-		case ' ':
-			
-			break;
-		default:
-			break;
+			switch (a)
+			{
+			case 'a':
+				if (g_game_handler.curr_block->pos[0] > FRAME_THICKNESS - 1)
+					g_game_handler.curr_block->pos[0]--;
+				break;
+			case 'd':
+				if (g_game_handler.curr_block->pos[0] + 
+						g_game_handler.curr_block->shape->get_size()[0] < 
+					(WINDOW_W - 1) - FRAME_THICKNESS)
+					g_game_handler.curr_block->pos[0]++;
+				break;
+			case ' ':
+				++g_game_handler.curr_block->rotation %= 4;
+				break;
+			default:
+				break;
+			}
 		}
+
 	}
 }
 
@@ -153,7 +210,7 @@ void Detect_Key()
  *			1, block is dropped by 1 unit
  *			2, block hit bottom (no drops afterwards)
  */
-uint8_t Detect_Drop(clock_t * p_time_ref, float_t time_interval, Shape_t * p_curr)
+uint8_t Detect_Drop(clock_t * p_time_ref, float_t time_interval, Block * p_curr)
 {
 	uint8_t ans = 0;
 
@@ -161,7 +218,7 @@ uint8_t Detect_Drop(clock_t * p_time_ref, float_t time_interval, Shape_t * p_cur
 
 	if (time_diff >= time_interval)
 	{
-		if (p_curr->pos[1] + p_curr->get_size()[1] < (WINDOW_H - 1) - FRAME_THICKNESS)
+		if (p_curr->pos[1] + p_curr->shape->get_size()[1] < (WINDOW_H - 1) - FRAME_THICKNESS)
 		{
 			p_curr->pos[1]++;
 			ans = 1;
@@ -178,46 +235,52 @@ uint8_t Detect_Drop(clock_t * p_time_ref, float_t time_interval, Shape_t * p_cur
 	return ans;
 }
 
+template <typename T=uint16_t, typename K=uint8_t>
+Block * Create_Block_Rand(std::vector<const Shape_t *> shapes_list)
+{
+	// Random Shape
+	//
+	T rand_shape_enc = (T) ( rand() % shapes_list.size() );
+	Shape_t * p_shape_rand = (Shape_t *) shapes_list[rand_shape_enc];
+
+	// Random Rotation
+	//
+	T rand_rot_enc = (T)( rand() % 4 );
+	//uint16_t rand_rot = (uint16_t) (rand_rot_enc * 90);
+	
+	// Random Horizontal placement
+	//
+	K random_width = FRAME_THICKNESS + (K) (rand() % (GAME_WINDOW_W - 
+			p_shape_rand->get_size()[(rand_rot_enc % 2)]) );
+
+	
+	return new Block(p_shape_rand, rand_rot_enc, {random_width , FRAME_THICKNESS});
+}
+
+
 int main()
 {
 	//printf("\e[?25l");
-	
+	srand(time(NULL));
+
 	// Make it ifdefine PLATFORM IS WIN
 	//
 	ShowConsoleCursor(false);
 
 	Clear_Screen();
+	Clear_Buffer();
 
-	Shape_t z_left_shape(
-		(uint8_t*) &g_z_left_shape_mask,
-		0,
-		(uint8_t*) g_z_left_shape_size,
-		{ 0,0 }
-	);
+	g_game_handler.curr_block = Create_Block_Rand(g_shapes_vector);
 
-	g_blocks_all.push_back(new Block(&z_left_shape, 0, { 0,0 }));
-
-	Shape_t z_right_shape(
-		(uint8_t*) &g_z_right_shape_mask,
-		0,
-		(uint8_t*) g_z_right_shape_size,
-		{0,0}
-	);
-	Shape_t t_shape(
-		(uint8_t*)&g_t_shape_mask,
-		0,
-		(uint8_t*)g_t_shape_size,
-		{0,0}
-	);
-
-	g_curr_shape = &t_shape;
 
 	Draw_Frame<>(g_window, WINDOW_W, WINDOW_H, FRAME_THICKNESS, FRAME_RENDERER);
-	Render_Shape(g_window, g_curr_shape);
-	
+	Render_Block(g_window, g_game_handler.curr_block);
+
+	// Handle Key Input in a new thread
+	//
 	std::thread key_handle(Detect_Key);
 
-	clock_t refresh_time;
+	clock_t refresh_time;		volatile uint8_t a = rand();
 	clock_t drop_time;
 
 	refresh_time = clock();
@@ -232,7 +295,7 @@ int main()
 		// Dropping Blocks one by one
 		//
 		uint8_t is_dropped;
-		is_dropped = Detect_Drop(&drop_time, DROP_INTERVAL, g_curr_shape);
+		is_dropped = Detect_Drop(&drop_time, DROP_INTERVAL, g_game_handler.curr_block);
 		if (is_dropped)
 		{
 			// Save the Window for future prints
@@ -247,7 +310,7 @@ int main()
 		//
 		Clear_Buffer();
 		Draw_Frame<>(g_window, WINDOW_W, WINDOW_H, FRAME_THICKNESS, FRAME_RENDERER);
-		Render_Shape(g_window, g_curr_shape);
+		Render_Block(g_window, g_game_handler.curr_block);
 
 		// FPS Based Screen Refresh
 		//

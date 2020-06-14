@@ -39,3 +39,5 @@ extern const uint8_t g_l_right_shape_size[];
 //
 extern const uint8_t g_square_shape_mask[SHAPE_GRID_W][SHAPE_GRID_H];
 extern const uint8_t g_square_shape_size[];
+
+extern const std::vector<const Shape_t*> g_shapes_vector;
