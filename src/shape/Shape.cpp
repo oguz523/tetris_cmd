@@ -18,13 +18,13 @@ Shape_t::Shape_t(uint8_t* mask_t, uint8_t* size_t, std::vector<uint8_t> palette_
 	std::vector<int8_t> diff_center = { 0,0 };
 	std::vector<int8_t> diff_zero = { 0, 0 };
 
-	for (int i = 0; i < this->palette_size[1]; i++)
+	for (int8_t i = 0; i < this->palette_size[1]; i++)
 	{
-		for (int j = 0; j < this->palette_size[0]; j++)
+		for (int8_t j = 0; j < this->palette_size[0]; j++)
 		{
 			if (this->mask[(i * this->palette_size[0]) + j])
 			{
-				int8_t diff_curr_x = (j - center_point[0]);
+				int8_t diff_curr_x = (j - (int8_t)center_point[0]);
 				if (diff_curr_x == 0)
 				{
 					diff_zero[0]++;

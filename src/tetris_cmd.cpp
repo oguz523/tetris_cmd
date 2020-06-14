@@ -47,7 +47,7 @@ public:
 Game_Handler g_game_handler;
 
 
-const int8_t rot_matrises[3][4] =
+const int8_t g_rot_matrises[3][4] =
 {
 	{0, -1, 1, 0 },
 	{-1, 0, 0, -1},
@@ -105,8 +105,8 @@ void ShowConsoleCursor(bool showFlag)
 
 void Render_Block(Window_t * p_window, Block * p_block)
 {
-	uint16_t shape_offset = (WINDOW_W * (p_block->pos[1] + FRAME_THICKNESS)) +
-		(p_block->pos[0] + FRAME_THICKNESS);
+	uint16_t shape_offset = (WINDOW_W * (p_block->pos[1])) +
+		(p_block->pos[0]);
 	std::vector<uint8_t> shape_size = p_block->shape->get_size();
 
 	uint16_t frame_point;
@@ -128,7 +128,7 @@ void Render_Block(Window_t * p_window, Block * p_block)
 
 		int8_t rot_matrix[4];
 
-		memcpy(rot_matrix, &(rot_matrises[p_block->rotation - 1][0]), 4);
+		memcpy(rot_matrix, &(g_rot_matrises[p_block->rotation - 1][0]), 4);
 
 		for (int i = 0; i < SHAPE_GRID_H; i++)
 		{
@@ -139,17 +139,16 @@ void Render_Block(Window_t * p_window, Block * p_block)
 					int8_t curr_x = j - p_block->shape->center[0];
 					int8_t curr_y = i - p_block->shape->center[1];
 
-					int8_t roted_x = 0;
-					int8_t roted_y = 0;
+					int8_t roted_coord[2];
 					for (int k = 0; k < 2; k++)
 					{
-						roted_x += (rot_matrix[k] * curr_x);
-						roted_y += (rot_matrix[k + 2] * curr_y);
+						int kk = k * 2;
+						roted_coord[k] = (rot_matrix[kk] * curr_x) + (rot_matrix[kk + 1] * curr_y);
 					}
-					uint8_t roted_diff_x = roted_x + p_block->shape->center[0];
-					uint8_t roted_diff_y = roted_y + p_block->shape->center[1];
+					int8_t roted_diff_x = roted_coord[0] + p_block->shape->center[0];
+					int8_t roted_diff_y = roted_coord[1] + p_block->shape->center[1];
 
-					frame_point = shape_offset + ((roted_diff_x * WINDOW_W) + roted_diff_y);
+					frame_point = shape_offset + ((roted_diff_y * WINDOW_W) + roted_diff_x);
 					p_window[frame_point] = BLOCK_RENDERED;
 
 				}
@@ -190,7 +189,8 @@ void Detect_Key()
 					g_game_handler.curr_block->pos[0]++;
 				break;
 			case ' ':
-				++g_game_handler.curr_block->rotation %= 4;
+				g_game_handler.curr_block->rotation++;
+				g_game_handler.curr_block->rotation %= 4;
 				break;
 			default:
 				break;
@@ -250,8 +250,8 @@ Block * Create_Block_Rand(std::vector<const Shape_t *> shapes_list)
 	
 	// Random Horizontal placement
 	//
-	K random_width = FRAME_THICKNESS + (K) (rand() % (GAME_WINDOW_W - 
-			p_shape_rand->get_size()[(rand_rot_enc % 2)]) );
+	K shape_width = p_shape_rand->get_size()[(rand_rot_enc % 2)];
+	K random_width = FRAME_THICKNESS + (K) (rand() % (GAME_WINDOW_W - (shape_width * 2)) + shape_width);
 
 	
 	return new Block(p_shape_rand, rand_rot_enc, {random_width , FRAME_THICKNESS});
